@@ -27,20 +27,13 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
 import java.net.SocketAddress;
 import java.util.UUID;
 
 import static de.erdbeerbaerlp.dcintegration.common.DiscordIntegration.INSTANCE;
 
-
 @Mixin(PlayerList.class)
 public class PlayerManagerMixin {
-
-    // Keep track of messages
-    Map<String, LocalDate> lastPlayerMessages = new HashMap<>(); 
 
     /**
      * Handle whitelisting
@@ -48,11 +41,6 @@ public class PlayerManagerMixin {
     @Inject(method = "canPlayerLogin", at = @At("HEAD"), cancellable = true)
     public void canJoin(SocketAddress address, GameProfile profile, CallbackInfoReturnable<net.minecraft.network.chat.Component> cir) {
         if (DiscordIntegration.INSTANCE == null) return;
-        
-        // Check for duplicate messages
-        if (ignoreDuplicateMessagesDaily(p)) {
-            return; // Skip the rest of the method if a message was already sent today
-        }
 
         LinkManager.checkGlobalAPI(profile.getId());
         final Component eventKick = INSTANCE.callEventO((e) -> e.onPlayerJoin(profile.getId()));
@@ -78,19 +66,5 @@ public class PlayerManagerMixin {
                 e.printStackTrace();
             }
         }
-    }
-
-    private boolean ignoreDuplicateMessagesDaily(ServerPlayer player) {
-        LocalDate today = LocalDate.now();
-        String playerId = player.getUniqueId().toString();
-
-        if (lastPlayerMessages.containsKey(playerId) && lastPlayerMessages.get(playerId).isEqual(today)) {
-            // A message was already sent today
-            return true; 
-        }
-
-        // This is the first message today
-        lastPlayerMessages.put(playerId, today);
-        return false; 
     }
 }

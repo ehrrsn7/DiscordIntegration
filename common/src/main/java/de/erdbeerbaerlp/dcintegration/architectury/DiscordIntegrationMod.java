@@ -39,7 +39,6 @@ public final class DiscordIntegrationMod {
     public static Metrics bstats;
     public static boolean stopped = false;
 
-    public Map<String, LocalDate> lastPlayerMessages = new HashMap<>(); 
 
     public static final ArrayList<UUID> timeouts = new ArrayList<>();
 
@@ -170,9 +169,12 @@ public final class DiscordIntegrationMod {
         }
     }
 
-    public static PlayerChatMessage ignoreDuplicateMessagesDaily(PlayerChatMessage message, ServerPlayer player) {
 
-    }
+
+
+
+
+
 
     public static PlayerChatMessage handleChatMessage(PlayerChatMessage message, ServerPlayer player) {
         if (DiscordIntegration.INSTANCE == null) return message;
