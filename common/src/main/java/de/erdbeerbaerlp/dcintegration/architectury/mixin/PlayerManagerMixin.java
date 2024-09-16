@@ -27,6 +27,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
 import java.net.SocketAddress;
 import java.util.UUID;
 
@@ -36,12 +39,21 @@ import static de.erdbeerbaerlp.dcintegration.common.DiscordIntegration.INSTANCE;
 @Mixin(PlayerList.class)
 public class PlayerManagerMixin {
 
+    // Keep track of messages
+    Map<String, LocalDate> lastPlayerMessages = new HashMap<>(); 
+
     /**
      * Handle whitelisting
      */
     @Inject(method = "canPlayerLogin", at = @At("HEAD"), cancellable = true)
     public void canJoin(SocketAddress address, GameProfile profile, CallbackInfoReturnable<net.minecraft.network.chat.Component> cir) {
         if (DiscordIntegration.INSTANCE == null) return;
+        
+        // Check for duplicate messages
+        if (ignoreDuplicateMessagesDaily(p)) {
+            return; // Skip the rest of the method if a message was already sent today
+        }
+
         LinkManager.checkGlobalAPI(profile.getId());
         final Component eventKick = INSTANCE.callEventO((e) -> e.onPlayerJoin(profile.getId()));
         if (eventKick != null) {
@@ -53,6 +65,7 @@ public class PlayerManagerMixin {
                 e.printStackTrace();
             }
         }
+
         if (Configuration.instance().linking.whitelistMode && DiscordIntegration.INSTANCE.getServerInterface().isOnlineMode()) {
             try {
                 if (!LinkManager.isPlayerLinked(profile.getId())) {
@@ -67,47 +80,17 @@ public class PlayerManagerMixin {
         }
     }
 
-    @Inject(at = @At(value = "TAIL"), method = "placeNewPlayer")
-    private void onPlayerJoin(Connection connection, ServerPlayer p, CommonListenerCookie commonListenerCookie, CallbackInfo ci) {
-        if (DiscordIntegration.INSTANCE != null) {
-            if (LinkManager.isPlayerLinked(p.getUUID()) && LinkManager.getLink(null, p.getUUID()).settings.hideFromDiscord)
-                return;
-            LinkManager.checkGlobalAPI(p.getUUID());
-            if (!Localization.instance().playerJoin.isBlank()) {
-                if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.playerJoinMessage.asEmbed) {
-                    final String avatarURL = Configuration.instance().webhook.playerAvatarURL.replace("%uuid%", p.getUUID().toString()).replace("%uuid_dashless%", p.getUUID().toString().replace("-", "")).replace("%name%", p.getName().getString()).replace("%randomUUID%", UUID.randomUUID().toString());
-                    if (!Configuration.instance().embedMode.playerJoinMessage.customJSON.isBlank()) {
-                        final EmbedBuilder b = Configuration.instance().embedMode.playerJoinMessage.toEmbedJson(Configuration.instance().embedMode.playerJoinMessage.customJSON
-                                .replace("%uuid%", p.getUUID().toString())
-                                .replace("%uuid_dashless%", p.getUUID().toString().replace("-", ""))
-                                .replace("%name%", ArchitecturyMessageUtils.formatPlayerName(p))
-                                .replace("%randomUUID%", UUID.randomUUID().toString())
-                                .replace("%avatarURL%", avatarURL)
-                                .replace("%playerColor%", "" + TextColors.generateFromUUID(p.getUUID()).getRGB())
-                        );
-                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()));
-                    } else {
-                        final EmbedBuilder b = Configuration.instance().embedMode.playerJoinMessage.toEmbed();
-                        b.setAuthor(ArchitecturyMessageUtils.formatPlayerName(p), null, avatarURL)
-                                .setDescription(Localization.instance().playerJoin.replace("%player%", ArchitecturyMessageUtils.formatPlayerName(p)));
-                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
-                    }
-                } else
-                    DiscordIntegration.INSTANCE.sendMessage(Localization.instance().playerJoin.replace("%player%", ArchitecturyMessageUtils.formatPlayerName(p)), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
-            }
-            // Fix link status (if user does not have role, give the role to the user, or vice versa)
-            WorkThread.executeJob(() -> {
-                if (Configuration.instance().linking.linkedRoleID.equals("0")) return;
-                final UUID uuid = p.getUUID();
-                if (!LinkManager.isPlayerLinked(uuid)) return;
-                final Guild guild = DiscordIntegration.INSTANCE.getChannel().getGuild();
-                final Role linkedRole = guild.getRoleById(Configuration.instance().linking.linkedRoleID);
-                if (LinkManager.isPlayerLinked(uuid)) {
-                    final Member member = DiscordIntegration.INSTANCE.getMemberById(LinkManager.getLink(null, uuid).discordID);
-                    if (!member.getRoles().contains(linkedRole))
-                        guild.addRoleToMember(member, linkedRole).queue();
-                }
-            });
+    private boolean ignoreDuplicateMessagesDaily(ServerPlayer player) {
+        LocalDate today = LocalDate.now();
+        String playerId = player.getUniqueId().toString();
+
+        if (lastPlayerMessages.containsKey(playerId) && lastPlayerMessages.get(playerId).isEqual(today)) {
+            // A message was already sent today
+            return true; 
         }
+
+        // This is the first message today
+        lastPlayerMessages.put(playerId, today);
+        return false; 
     }
 }
