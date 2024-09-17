@@ -7,3 +7,4 @@
 /neoforge/.gradle/
 /neoforge/build/
 .DS_Store
+~/.nvm/**
