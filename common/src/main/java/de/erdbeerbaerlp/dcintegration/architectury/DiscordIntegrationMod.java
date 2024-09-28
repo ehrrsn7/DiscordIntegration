@@ -8,6 +8,7 @@ import de.erdbeerbaerlp.dcintegration.architectury.command.McCommandDiscord;
 import de.erdbeerbaerlp.dcintegration.architectury.metrics.Metrics;
 import de.erdbeerbaerlp.dcintegration.architectury.util.ArchitecturyMessageUtils;
 import de.erdbeerbaerlp.dcintegration.architectury.util.ArchitecturyServerInterface;
+import de.erdbeerbaerlp.dcintegration.architectury.util.MessageHistory;
 import de.erdbeerbaerlp.dcintegration.common.DiscordIntegration;
 import de.erdbeerbaerlp.dcintegration.common.addon.AddonLoader;
 import de.erdbeerbaerlp.dcintegration.common.addon.DiscordAddonMeta;
@@ -38,6 +39,7 @@ public final class DiscordIntegrationMod {
     public static MinecraftServer server = null;
     public static Metrics bstats;
     public static boolean stopped = false;
+    public static MessageHistory history = new MessageHistory();
 
 
     public static final ArrayList<UUID> timeouts = new ArrayList<>();
@@ -188,8 +190,18 @@ public final class DiscordIntegrationMod {
         final String text = MessageUtils.escapeMarkdown(message.decoratedContent().getString());
         final MessageEmbed embed = ArchitecturyMessageUtils.genItemStackEmbedIfAvailable(message.decoratedContent(), player.level());
         if (DiscordIntegration.INSTANCE != null) {
+
+            // check for duplicates using history
+            MessageHistory.DuplicateCheckResult result = history.checkDuplicate(player, message);
+            System.out.println(String.format("handleChatMessage(%s)", result.toString()));
+            if (result.message().toString().contains("printAllMessages"))
+                DiscordIntegration.LOGGER.error(String.format(
+                    "All Messages: %s", history.allMessagesToString()));
+
             if (DiscordIntegration.INSTANCE.callEvent((e) -> {
                 if (e instanceof ArchitecturyDiscordEventHandler) {
+
+                    // ! MESSAGE SENT HERE?
                     return ((ArchitecturyDiscordEventHandler) e).onMcChatMessage(finalMessage.decoratedContent(), player);
                 }
                 return false;
@@ -219,6 +231,9 @@ public final class DiscordIntegrationMod {
                                 .replace("%msg%", text)
                                 .replace("%playerColor%", "" + TextColors.generateFromUUID(player.getUUID()).getRGB())
                         );
+
+
+                        // ! MESSAGE SENT HERE?
                         DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID));
                     } else {
                         EmbedBuilder b = Configuration.instance().embedMode.chatMessages.toEmbed();
@@ -226,9 +241,15 @@ public final class DiscordIntegrationMod {
                             b = b.setColor(TextColors.generateFromUUID(player.getUUID()));
                         b = b.setAuthor(ArchitecturyMessageUtils.formatPlayerName(player), null, avatarURL)
                                 .setDescription(text);
+
+
+                        // ! MESSAGE SENT HERE?
                         DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID));
                     }
                 } else
+
+
+                    // ! MESSAGE SENT HERE?
                     DiscordIntegration.INSTANCE.sendMessage(ArchitecturyMessageUtils.formatPlayerName(player), player.getUUID().toString(), new DiscordMessage(embed, text, true), channel);
 
             if (!Configuration.instance().compatibility.disableParsingMentionsIngame) {

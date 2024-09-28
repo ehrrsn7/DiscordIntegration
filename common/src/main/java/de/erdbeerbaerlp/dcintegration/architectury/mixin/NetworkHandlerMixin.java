@@ -3,6 +3,7 @@ package de.erdbeerbaerlp.dcintegration.architectury.mixin;
 
 import de.erdbeerbaerlp.dcintegration.architectury.DiscordIntegrationMod;
 import de.erdbeerbaerlp.dcintegration.architectury.util.ArchitecturyMessageUtils;
+import de.erdbeerbaerlp.dcintegration.architectury.util.MessageHistory;
 import de.erdbeerbaerlp.dcintegration.common.DiscordIntegration;
 import de.erdbeerbaerlp.dcintegration.common.storage.Configuration;
 import de.erdbeerbaerlp.dcintegration.common.storage.Localization;
@@ -41,6 +42,15 @@ public class NetworkHandlerMixin {
         }
         if (reason.equals(Component.translatable("disconnect.timeout")))
             DiscordIntegrationMod.timeouts.add(this.player.getUUID());
+
+        MessageHistory.DuplicateCheckResult result = DiscordIntegrationMod
+            .history
+            .checkDuplicate(player, "left");
+        System.out.println(String.format(
+            "NetworkHandlerMixin.onDisconnect(%s)",
+            result.toString()
+        ));
+
         INSTANCE.callEventC((a)->a.onPlayerLeave(player.getUUID()));
         final String avatarURL = Configuration.instance().webhook.playerAvatarURL.replace("%uuid%", player.getUUID().toString()).replace("%uuid_dashless%", player.getUUID().toString().replace("-", "")).replace("%name%", player.getName().getString()).replace("%randomUUID%", UUID.randomUUID().toString());
         if (DiscordIntegration.INSTANCE != null && !DiscordIntegrationMod.timeouts.contains(player.getUUID())) {
@@ -55,13 +65,22 @@ public class NetworkHandlerMixin {
                                 .replace("%avatarURL%", avatarURL)
                                 .replace("%playerColor%", "" + TextColors.generateFromUUID(player.getUUID()).getRGB())
                         );
+
+
+                        // ! MESSAGE SENT HERE?
                         DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                     } else {
                         final EmbedBuilder b = Configuration.instance().embedMode.playerLeaveMessages.toEmbed().setAuthor(ArchitecturyMessageUtils.formatPlayerName(player), null, avatarURL)
                                 .setDescription(Localization.instance().playerLeave.replace("%player%", ArchitecturyMessageUtils.formatPlayerName(player)));
+
+
+                        // ! MESSAGE SENT HERE?
                         DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                     }
                 } else
+
+
+                    // ! MESSAGE SENT HERE?
                     DiscordIntegration.INSTANCE.sendMessage(Localization.instance().playerLeave.replace("%player%", ArchitecturyMessageUtils.formatPlayerName(player)),INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
             }
         } else if (DiscordIntegration.INSTANCE != null && DiscordIntegrationMod.timeouts.contains(player.getUUID())) {
@@ -70,8 +89,14 @@ public class NetworkHandlerMixin {
                     final EmbedBuilder b = Configuration.instance().embedMode.playerLeaveMessages.toEmbed()
                             .setAuthor(ArchitecturyMessageUtils.formatPlayerName(player), null, avatarURL)
                             .setDescription(Localization.instance().playerTimeout.replace("%player%", ArchitecturyMessageUtils.formatPlayerName(player)));
+
+
+                    // ! MESSAGE SENT HERE?
                     DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                 } else
+
+
+                    // ! MESSAGE SENT HERE?
                     DiscordIntegration.INSTANCE.sendMessage(Localization.instance().playerTimeout.replace("%player%", ArchitecturyMessageUtils.formatPlayerName(player)),INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
             }
             DiscordIntegrationMod.timeouts.remove(player.getUUID());
