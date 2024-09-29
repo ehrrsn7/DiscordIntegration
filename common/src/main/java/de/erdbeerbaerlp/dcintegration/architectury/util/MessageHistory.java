@@ -9,6 +9,7 @@ import com.google.gson.stream.*;
 import com.google.gson.reflect.TypeToken;
 import java.io.*;
 import java.util.*;
+import java.util.stream.*;
 import java.lang.reflect.Type;
 import java.net.UnknownHostException;
 import java.net.URL;
@@ -21,6 +22,10 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     private boolean enableDuplicatesCheck = loadFromConfig("Config.Messages.ignoreDuplicateMessages");
     // Keep record of messages in memory
     private List<SimpleChatMessage> messages = new ArrayList<>();
+
+    public MessageHistory() {
+        if (!initialized) init();
+    }
 
     public void init() {
         try {
@@ -66,7 +71,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     }
 
     // Destruct
-    private void shutdown() {
+    public void shutdown() {
         FileIO.cleanUpAndWriteMessages(messages);
         DiscordIntegration.LOGGER.info(String.format(
             "MessageHistory stopping: saving %,d messages...",
@@ -78,7 +83,6 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     // public methods
 
     public DuplicateCheckResult checkDuplicate(SimpleChatMessage msg) {
-        if (!initialized) init();
         if (msg.message().contains("Server stopped")) shutdown();
         long amountFound = countDuplicates(msg);
         boolean hasDuplicate = amountFound > 0;
@@ -178,6 +182,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     private static JsonObject topOf(List<JsonObject> list) {
         return list.get(lastIndex(list));
     }
+    // #endregion Accessors
 
     // #region Useful Overloaded Methods
     public DuplicateCheckResult checkDuplicate(ServerPlayer sender, PlayerChatMessage signedMessage) {

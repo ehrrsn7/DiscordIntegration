@@ -1,0 +1,80 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Rebuild Fabric",
+            "dependsOn": "Start Minecraft Server Service" // run all below
+        },
+        {
+            "label": "Compile Gradle",
+            "type": "shell",
+            "command": "gradle",
+            "args": [
+                "build"
+            ],
+            "options": {
+                "cwd": "C:/Users/ehrrsn7.ELIJAH-PC/Code/Java/DiscordIntegration"
+            },
+            "problemMatcher": [
+                "$gradle"
+            ]
+        },
+        {
+            "label": "Stop Minecraft Server Service",
+            "type": "process",
+            "command": "nssm",
+            "args": [
+                "stop",
+                "Minecraft Server"
+            ],
+            "windows": {
+                "options": {
+                    "runas": "Administrator"
+                }
+            },
+            "dependsOn": "Compile Gradle"
+        },
+        {
+            "label": "Copy JAR to Server",
+            "type": "shell",
+            "command": "Copy-Item",
+            "args": [
+                "-Path",
+                "'C:/Users/ehrrsn7.ELIJAH-PC/Code/Java/DiscordIntegration/common/build/libs/dcintegration-common-MC1.21-3.1.0-SNAPSHOT-transformProductionFabric.jar'",
+                "-Destination",
+                "'D:/.minecraft/server/mods'",
+                "-Force"
+            ],
+            "windows": {
+                "options": {
+                    "runas": "Administrator"
+                }
+            },
+            "dependsOn": "Stop Minecraft Server Service"
+        },
+        {
+            "label": "Run Minecraft Server",
+            "type": "shell",
+            "command": "./start.bat",
+            "options": {
+                "cwd": "D:/.minecraft/server"
+            },
+            "dependsOn": "Copy JAR to Server"
+        },
+        {
+            "label": "Start Minecraft Server Service",
+            "type": "shell",
+            "command": "nssm",
+            "args": [
+                "start",
+                "Minecraft Server"
+            ],
+            "windows": {
+                "options": {
+                    "runas": "Administrator"
+                }
+            },
+            "dependsOn": "Run Minecraft Server"
+        }
+    ]
+}
