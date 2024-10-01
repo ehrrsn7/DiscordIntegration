@@ -1,5 +1,6 @@
 package de.erdbeerbaerlp.dcintegration.architectury.mixin;
 
+import de.erdbeerbaerlp.dcintegration.architectury.DiscordIntegrationMod;
 import de.erdbeerbaerlp.dcintegration.architectury.util.ArchitecturyMessageUtils;
 import de.erdbeerbaerlp.dcintegration.common.DiscordIntegration;
 import de.erdbeerbaerlp.dcintegration.common.storage.Configuration;
@@ -33,7 +34,7 @@ public class ServerPlayerMixin {
                 return;
             final Component deathMessage = s.getLocalizedDeathMessage(p);
             final MessageEmbed embed = ArchitecturyMessageUtils.genItemStackEmbedIfAvailable(deathMessage, p.level());
-            if (!Localization.instance().playerDeath.isBlank())
+            if (!Localization.instance().playerDeath.isBlank() && !DiscordIntegrationMod.history.checkDuplicate(p, deathMessage.getString()).hasDuplicate())
                 if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.deathMessage.asEmbed) {
                     final String avatarURL = Configuration.instance().webhook.playerAvatarURL.replace("%uuid%", p.getUUID().toString()).replace("%uuid_dashless%", p.getUUID().toString().replace("-", "")).replace("%name%", p.getName().getString()).replace("%randomUUID%", UUID.randomUUID().toString());
                     if(!Configuration.instance().embedMode.deathMessage.customJSON.isBlank()){

@@ -3,6 +3,7 @@ package de.erdbeerbaerlp.dcintegration.architectury.mixin;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dcshadow.net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
+import de.erdbeerbaerlp.dcintegration.architectury.DiscordIntegrationMod;
 import de.erdbeerbaerlp.dcintegration.architectury.util.ArchitecturyServerInterface;
 import de.erdbeerbaerlp.dcintegration.common.DiscordIntegration;
 import de.erdbeerbaerlp.dcintegration.common.minecraftCommands.MCSubCommand;
@@ -36,7 +37,7 @@ public class CommandManagerMixin {
         String name = source.getTextName();
         command = command.replaceFirst(Pattern.quote("/"), "");
         if (DiscordIntegration.INSTANCE != null) {
-            if (!Configuration.instance().commandLog.channelID.equals("0")) {
+            if (!Configuration.instance().commandLog.channelID.equals("0") && !DiscordIntegrationMod.history.checkDuplicate(source, command).hasDuplicate()) {
                 if ((!Configuration.instance().commandLog.commandWhitelist && !ArrayUtils.contains(Configuration.instance().commandLog.ignoredCommands, command.split(" ")[0])) ||
                         (Configuration.instance().commandLog.commandWhitelist && ArrayUtils.contains(Configuration.instance().commandLog.ignoredCommands, command.split(" ")[0])))
                     DiscordIntegration.INSTANCE.sendMessage(Configuration.instance().commandLog.message
@@ -45,7 +46,7 @@ public class CommandManagerMixin {
                             .replace("%cmd-no-args%", command.split(" ")[0]), DiscordIntegration.INSTANCE.getChannel(Configuration.instance().commandLog.channelID));
             }
             boolean raw = false;
-            if (((command.startsWith("say")) && Configuration.instance().messages.sendOnSayCommand) || (command.startsWith("me") && Configuration.instance().messages.sendOnMeCommand)) {
+            if (((command.startsWith("say")) && Configuration.instance().messages.sendOnSayCommand) || (command.startsWith("me") && Configuration.instance().messages.sendOnMeCommand) && !DiscordIntegrationMod.history.checkDuplicate(source, command).hasDuplicate()) {
                 String msg = command.replace("say ", "");
                 if (command.startsWith("say"))
                     msg = msg.replaceFirst("say ", "");

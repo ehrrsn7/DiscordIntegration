@@ -70,7 +70,7 @@ public final class DiscordIntegrationMod {
             if (DiscordIntegration.INSTANCE.getJDA() != null) {
                 Thread.sleep(2000); //Wait for it to cache the channels
                 CommandRegistry.registerDefaultCommands();
-                if (!Localization.instance().serverStarting.isEmpty()) {
+                if (!Localization.instance().serverStarting.isEmpty() && !history.checkDuplicate(minecraftServer, "starting").hasDuplicate()) {
 
                     if (!Localization.instance().serverStarting.isBlank())
                         if (DiscordIntegration.INSTANCE.getChannel() != null) {
@@ -92,7 +92,7 @@ public final class DiscordIntegrationMod {
         DiscordIntegration.LOGGER.info("Started");
         if (DiscordIntegration.INSTANCE != null) {
             DiscordIntegration.started = new Date().getTime();
-            if (!Localization.instance().serverStarted.isBlank())
+            if (!Localization.instance().serverStarted.isBlank() && !history.checkDuplicate(minecraftServer, "started").hasDuplicate())
                 if (DiscordIntegration.startingMsg != null) {
                     if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.startMessages.asEmbed) {
                         if (!Configuration.instance().embedMode.startMessages.customJSON.isBlank()) {
@@ -138,7 +138,7 @@ public final class DiscordIntegrationMod {
     public static void serverStopping(MinecraftServer minecraftServer) {
         Metrics.MetricsBase.scheduler.shutdownNow();
         if (DiscordIntegration.INSTANCE != null) {
-            if (!Localization.instance().serverStopped.isBlank())
+            if (!Localization.instance().serverStopped.isBlank() && !history.checkDuplicate(minecraftServer, "stopping").hasDuplicate())
                 if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.stopMessages.asEmbed) {
                     if (!Configuration.instance().embedMode.stopMessages.customJSON.isBlank()) {
                         final EmbedBuilder b = Configuration.instance().embedMode.stopMessages.toEmbedJson(Configuration.instance().embedMode.stopMessages.customJSON);
@@ -158,7 +158,7 @@ public final class DiscordIntegrationMod {
         if (DiscordIntegration.INSTANCE != null) {
             if (!stopped && DiscordIntegration.INSTANCE.getJDA() != null) minecraftServer.execute(() -> {
                 DiscordIntegration.INSTANCE.stopThreads();
-                if (!Localization.instance().serverCrash.isBlank())
+                if (!Localization.instance().serverCrash.isBlank() && !history.checkDuplicate(minecraftServer, "stopped").hasDuplicate())
                     try {
                         if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.stopMessages.asEmbed) {
                             DiscordIntegration.INSTANCE.sendMessageReturns(new MessageCreateBuilder().addEmbeds(Configuration.instance().embedMode.stopMessages.toEmbed().setDescription(Localization.instance().serverCrash).build()).build(), DiscordIntegration.INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID)).get();
@@ -185,78 +185,59 @@ public final class DiscordIntegrationMod {
         if (LinkManager.isPlayerLinked(player.getUUID()) && LinkManager.getLink(null, player.getUUID()).settings.hideFromDiscord) {
             return message;
         }
+        if (DiscordIntegration.INSTANCE == null) return message;
 
         final PlayerChatMessage finalMessage = message;
         final String text = MessageUtils.escapeMarkdown(message.decoratedContent().getString());
         final MessageEmbed embed = ArchitecturyMessageUtils.genItemStackEmbedIfAvailable(message.decoratedContent(), player.level());
-        if (DiscordIntegration.INSTANCE != null) {
 
-            // check for duplicates using history
-            MessageHistory.DuplicateCheckResult result = history.checkDuplicate(player, message);
-            System.out.println(String.format("handleChatMessage(%s)", result.toString()));
-            if (result.message().toString().contains("printAllMessages"))
-                DiscordIntegration.LOGGER.error(String.format(
-                    "All Messages: %s", history.allMessagesToString()));
+        if (DiscordIntegration.INSTANCE.callEvent((e) -> {
+            if (e instanceof ArchitecturyDiscordEventHandler) {
+                return ((ArchitecturyDiscordEventHandler) e).onMcChatMessage(finalMessage.decoratedContent(), player);
+            }
+            return false;
+        })) {
+            return message;
+        }
+        final GuildMessageChannel channel = DiscordIntegration.INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID);
+        if (channel == null) {
+            return message;
+        }
+        final String json = net.minecraft.network.chat.Component.Serializer.toJson(message.decoratedContent(), player.level().registryAccess());
 
-            if (DiscordIntegration.INSTANCE.callEvent((e) -> {
-                if (e instanceof ArchitecturyDiscordEventHandler) {
-
-                    // ! MESSAGE SENT HERE?
-                    return ((ArchitecturyDiscordEventHandler) e).onMcChatMessage(finalMessage.decoratedContent(), player);
+        final Component comp = GsonComponentSerializer.gson().deserialize(json);
+        if(INSTANCE.callEvent((e)->e.onMinecraftMessage(comp, player.getUUID()))){
+            return message;
+        }
+        if (!Localization.instance().discordChatMessage.isBlank() && !history.checkDuplicate(player, message).hasDuplicate())
+            if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.chatMessages.asEmbed) {
+                final String avatarURL = Configuration.instance().webhook.playerAvatarURL.replace("%uuid%", player.getUUID().toString()).replace("%uuid_dashless%", player.getUUID().toString().replace("-", "")).replace("%name%", player.getName().getString()).replace("%randomUUID%", UUID.randomUUID().toString());
+                if (!Configuration.instance().embedMode.chatMessages.customJSON.isBlank()) {
+                    final EmbedBuilder b = Configuration.instance().embedMode.chatMessages.toEmbedJson(Configuration.instance().embedMode.chatMessages.customJSON
+                            .replace("%uuid%", player.getUUID().toString())
+                            .replace("%uuid_dashless%", player.getUUID().toString().replace("-", ""))
+                            .replace("%name%", ArchitecturyMessageUtils.formatPlayerName(player))
+                            .replace("%randomUUID%", UUID.randomUUID().toString())
+                            .replace("%avatarURL%", avatarURL)
+                            .replace("%msg%", text)
+                            .replace("%playerColor%", "" + TextColors.generateFromUUID(player.getUUID()).getRGB())
+                    );
+                    DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID));
+                } else {
+                    EmbedBuilder b = Configuration.instance().embedMode.chatMessages.toEmbed();
+                    if (Configuration.instance().embedMode.chatMessages.generateUniqueColors)
+                        b = b.setColor(TextColors.generateFromUUID(player.getUUID()));
+                    b = b.setAuthor(ArchitecturyMessageUtils.formatPlayerName(player), null, avatarURL)
+                            .setDescription(text);
+                    DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID));
                 }
-                return false;
-            })) {
-                return message;
-            }
-            final GuildMessageChannel channel = DiscordIntegration.INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID);
-            if (channel == null) {
-                return message;
-            }
-            final String json = net.minecraft.network.chat.Component.Serializer.toJson(message.decoratedContent(), player.level().registryAccess());
+            } else
+                DiscordIntegration.INSTANCE.sendMessage(ArchitecturyMessageUtils.formatPlayerName(player), player.getUUID().toString(), new DiscordMessage(embed, text, true), channel);
 
-            final Component comp = GsonComponentSerializer.gson().deserialize(json);
-            if(INSTANCE.callEvent((e)->e.onMinecraftMessage(comp, player.getUUID()))){
-                return message;
-            }
-            if (!Localization.instance().discordChatMessage.isBlank())
-                if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.chatMessages.asEmbed) {
-                    final String avatarURL = Configuration.instance().webhook.playerAvatarURL.replace("%uuid%", player.getUUID().toString()).replace("%uuid_dashless%", player.getUUID().toString().replace("-", "")).replace("%name%", player.getName().getString()).replace("%randomUUID%", UUID.randomUUID().toString());
-                    if (!Configuration.instance().embedMode.chatMessages.customJSON.isBlank()) {
-                        final EmbedBuilder b = Configuration.instance().embedMode.chatMessages.toEmbedJson(Configuration.instance().embedMode.chatMessages.customJSON
-                                .replace("%uuid%", player.getUUID().toString())
-                                .replace("%uuid_dashless%", player.getUUID().toString().replace("-", ""))
-                                .replace("%name%", ArchitecturyMessageUtils.formatPlayerName(player))
-                                .replace("%randomUUID%", UUID.randomUUID().toString())
-                                .replace("%avatarURL%", avatarURL)
-                                .replace("%msg%", text)
-                                .replace("%playerColor%", "" + TextColors.generateFromUUID(player.getUUID()).getRGB())
-                        );
-
-
-                        // ! MESSAGE SENT HERE?
-                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID));
-                    } else {
-                        EmbedBuilder b = Configuration.instance().embedMode.chatMessages.toEmbed();
-                        if (Configuration.instance().embedMode.chatMessages.generateUniqueColors)
-                            b = b.setColor(TextColors.generateFromUUID(player.getUUID()));
-                        b = b.setAuthor(ArchitecturyMessageUtils.formatPlayerName(player), null, avatarURL)
-                                .setDescription(text);
-
-
-                        // ! MESSAGE SENT HERE?
-                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()),INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID));
-                    }
-                } else
-
-
-                    // ! MESSAGE SENT HERE?
-                    DiscordIntegration.INSTANCE.sendMessage(ArchitecturyMessageUtils.formatPlayerName(player), player.getUUID().toString(), new DiscordMessage(embed, text, true), channel);
-
-            if (!Configuration.instance().compatibility.disableParsingMentionsIngame) {
-                final String editedJson = GsonComponentSerializer.gson().serialize(MessageUtils.mentionsToNames(comp, channel.getGuild()));
-                final MutableComponent txt = net.minecraft.network.chat.Component.Serializer.fromJson(editedJson,player.level().registryAccess());
-                message = message.withUnsignedContent(txt);
-            }
+        if (!Configuration.instance().compatibility.disableParsingMentionsIngame) {
+            final String editedJson = GsonComponentSerializer.gson().serialize(MessageUtils.mentionsToNames(comp, channel.getGuild()));
+            final MutableComponent txt = net.minecraft.network.chat.Component.Serializer.fromJson(editedJson,player.level().registryAccess());
+            message = message.withUnsignedContent(txt);
         }
         return message;
     }

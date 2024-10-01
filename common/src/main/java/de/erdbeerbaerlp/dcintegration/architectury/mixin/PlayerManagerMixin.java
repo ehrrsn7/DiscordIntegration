@@ -72,17 +72,10 @@ public class PlayerManagerMixin {
     @Inject(at = @At(value = "TAIL"), method = "placeNewPlayer")
     private void onPlayerJoin(Connection connection, ServerPlayer p, CommonListenerCookie commonListenerCookie, CallbackInfo ci) {
         if (DiscordIntegration.INSTANCE != null) {
-
-            MessageHistory.DuplicateCheckResult result = DiscordIntegrationMod.history.checkDuplicate(p, "joined");
-            System.out.println(String.format(
-                "PlayerManagerMixin.onPlayerJoin(%s)",
-                result.toString()
-            ));
-
             if (LinkManager.isPlayerLinked(p.getUUID()) && LinkManager.getLink(null, p.getUUID()).settings.hideFromDiscord)
                 return;
             LinkManager.checkGlobalAPI(p.getUUID());
-            if (!Localization.instance().playerJoin.isBlank()) {
+            if (!Localization.instance().playerJoin.isBlank() && !DiscordIntegrationMod.history.checkDuplicate(p, "joined").hasDuplicate()) {
                 if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.playerJoinMessage.asEmbed) {
                     final String avatarURL = Configuration.instance().webhook.playerAvatarURL.replace("%uuid%", p.getUUID().toString()).replace("%uuid_dashless%", p.getUUID().toString().replace("-", "")).replace("%name%", p.getName().getString()).replace("%randomUUID%", UUID.randomUUID().toString());
                     if (!Configuration.instance().embedMode.playerJoinMessage.customJSON.isBlank()) {
@@ -94,23 +87,14 @@ public class PlayerManagerMixin {
                                 .replace("%avatarURL%", avatarURL)
                                 .replace("%playerColor%", "" + TextColors.generateFromUUID(p.getUUID()).getRGB())
                         );
-
-
-                        // ! MESSAGE SENT HERE?
                         DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()));
                     } else {
                         final EmbedBuilder b = Configuration.instance().embedMode.playerJoinMessage.toEmbed();
                         b.setAuthor(ArchitecturyMessageUtils.formatPlayerName(p), null, avatarURL)
                                 .setDescription(Localization.instance().playerJoin.replace("%player%", ArchitecturyMessageUtils.formatPlayerName(p)));
-
-
-                        // ! MESSAGE SENT HERE?
                         DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                     }
                 } else
-
-
-                    // ! MESSAGE SENT HERE?
                     DiscordIntegration.INSTANCE.sendMessage(Localization.instance().playerJoin.replace("%player%", ArchitecturyMessageUtils.formatPlayerName(p)), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
             }
             // Fix link status (if user does not have role, give the role to the user, or vice versa)

@@ -2,8 +2,10 @@ package de.erdbeerbaerlp.dcintegration.architectury.util;
 
 import de.erdbeerbaerlp.dcintegration.common.DiscordIntegration;
 import de.erdbeerbaerlp.dcintegration.common.storage.Configuration;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import com.google.gson.*;
 import com.google.gson.stream.*;
 import com.google.gson.reflect.TypeToken;
@@ -29,21 +31,22 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
 
     public void init() {
         try {
+            if (initialized) return;
             FileIO.init();
             messages = FileIO.readAndCleanUpMessages();
             // done, record
             initialized = true;
-            DiscordIntegration.LOGGER.info(String.format(
-                "MessageHistory initialized: loaded %,d messages...",
-                messages.size()
-            ));
+            String x = "DiscordIntegration MessageHistory initialized: " +
+                String.format("loaded %,d messages...", messages.size());
+            addMessage(new SimpleChatMessage(x));
+            DiscordIntegration.LOGGER.info(x);
         }
         catch (Exception e) {
             messages = emptyList();
-            DiscordIntegration.LOGGER.warn(String.format(
-                "MessageHistory not successfully initialized: loaded %,d messages...",
-                messages.size()
-            ));
+            DiscordIntegration.LOGGER.error(
+                "DiscordIntegration MessageHistory not successfully initialized: " +
+                String.format("loaded %,d messages...", messages.size()
+            ), e);
         }
     }
 
@@ -83,7 +86,12 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     // public methods
 
     public DuplicateCheckResult checkDuplicate(SimpleChatMessage msg) {
-        if (msg.message().contains("Server stopped")) shutdown();
+        if (!enableDuplicatesCheck)
+            // to disable duplicates check, then early return dummy result
+            // where hasDuplicate == false
+            return new DuplicateCheckResult(false, messages.size(), 0, msg);
+        if (msg.message().contains("starting")) init();
+        if (msg.message().contains("stopping")) shutdown();
         long amountFound = countDuplicates(msg);
         boolean hasDuplicate = amountFound > 0;
         if (!hasDuplicate) addMessage(msg);
@@ -121,9 +129,9 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             return filterDuplicates(msg).count();
         }
         catch (Exception e) {
-            DiscordIntegration.LOGGER.warn(
-                String.format("Exception in countDuplicates(SimpleChatMessage %s)", msg.toString()), e);
-            return -1;
+            String errorMsg = String.format("Exception in countDuplicates(SimpleChatMessage %s)", msg.toString());
+            DiscordIntegration.LOGGER.warn(errorMsg, e);
+            return 0;
         }
     }
 
@@ -139,6 +147,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     // #endregion Handle Duplicates
 
     // #region Add
+    // note: file should be synced with messages List or behavior will not be correct
     private void addMessage(SimpleChatMessage msg) {
         if (msg == null) throw new NullPointerException();
         messages.add(msg);
@@ -147,6 +156,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     // #endregion Add
 
     // #region Remove
+    // note: file should be synced with messages List or behavior will not be correct
     private void removeOldMessages() {
         messages.removeIf(element -> !element.matchesToday());
         FileIO.writeMessages(messages); // sync with file
@@ -164,7 +174,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     // #endregion Remove
 
     // #region Accessors
-    private static String allMessagesToString(List<SimpleChatMessage> msgs) {
+    private static String toString(List<SimpleChatMessage> msgs) {
         List<String> l = msgs.stream()
             .map(SimpleChatMessage::toString)
             .collect(Collectors.toList());
@@ -179,7 +189,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         return list.size() - 1;
     }
 
-    private static JsonObject topOf(List<JsonObject> list) {
+    private static JsonObject backOf(List<JsonObject> list) {
         return list.get(lastIndex(list));
     }
     // #endregion Accessors
@@ -193,17 +203,17 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         return checkDuplicate(new SimpleChatMessage(sender, message));
     }
 
-    private boolean hasDuplicate(ServerPlayer sender, PlayerChatMessage signedMessage) {
-        return hasDuplicate(new SimpleChatMessage(sender, signedMessage));
+    public DuplicateCheckResult checkDuplicate(MinecraftServer server, String message) {
+        return checkDuplicate(new SimpleChatMessage(server, message));
     }
 
-    private boolean hasDuplicate(ServerPlayer sender, String message) {
-        return hasDuplicate(new SimpleChatMessage(sender, message));
+    public DuplicateCheckResult checkDuplicate(CommandSourceStack source, String message) {
+        return checkDuplicate(new SimpleChatMessage(source, message));
     }
 
-    public String allMessagesToString() {
+    public String toString() {
         // useful for debugging
-        return allMessagesToString(messages);
+        return toString(messages);
     }
     // #endregion Useful Overloaded Methods
 
@@ -217,14 +227,6 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         private LocalDate date = LocalDate.now();
 
         // Constructors
-        // default
-        public SimpleChatMessage() {
-            setPlayerID(null);
-            setUsername(null);
-            setMessage(null);
-            setDate();
-        }
-
         // non-default
         public SimpleChatMessage(ServerPlayer sender, PlayerChatMessage signedMessage) {
             // Values should be assigned no matter what using null checks
@@ -235,28 +237,50 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         }
 
         public SimpleChatMessage(ServerPlayer sender, String text) {
-            // Values should be assigned no matter what using null checks
+            // for non-chat-based events
             setPlayerID(sender);
             setUsername(sender);
-            setMessageText(text);
+            setMessage(text);
+            setDate();
+        }
+
+        public SimpleChatMessage(MinecraftServer server, String text) {
+            // for server messages
+            setPlayerID(server);
+            setUsername(server);
+            setMessage(text);
+            setDate();
+        }
+
+        public SimpleChatMessage(CommandSourceStack source, String text) {
+            // for commands
+            setPlayerID(source);
+            setUsername(source);
+            setMessage(text);
+            setDate();
+        }
+
+        public SimpleChatMessage(String text) {
+            // for internal use
+            setMessage(text);
             setDate();
         }
         // #endregion Construct
 
         // #region Accessors
-        // accessors
         public String playerID() {
             try {
                 if (playerID == null) throw new NullPointerException();
                 return playerID;
             }
             catch (Exception e) {
-                return "Unknown Sender";
+                return "0000000";
             }
         }
 
-        public String toPlayerID(ServerPlayer sender) {
+        private String toPlayerID(ServerPlayer sender) {
             try {
+                if (sender == null) throw new NullPointerException();
                 return sender.getUUID().toString();
             }
             catch (Exception e) {
@@ -264,8 +288,32 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             }
         }
 
+        // different syntax for server
+        private String toPlayerID(MinecraftServer server) {
+            try {
+                if (server == null) throw new NullPointerException();
+                return "Server"; // ! is there a more fitting way to get id from server obj?
+            }
+            catch (Exception e) {
+                return null;
+            }
+        }
+
+        // different syntax for commands
+        private String toPlayerID(CommandSourceStack source) {
+            try {
+                if (source == null) throw new NullPointerException();
+                return source.getEntity().getUUID().toString();
+            }
+            catch (Exception e) {
+                return null;
+            }
+        }
+
+        // #region Setters
         private void setPlayerID(ServerPlayer sender) {
             try {
+                if (sender == null) throw new NullPointerException();
                 playerID = toPlayerID(sender);
             }
             catch (NullPointerException e) {
@@ -273,25 +321,119 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             }
         }
 
+        private void setPlayerID(MinecraftServer server) {
+            try {
+                if (server == null) throw new NullPointerException();
+                playerID = toPlayerID(server);
+            }
+            catch (NullPointerException e) {
+                playerID = null;
+            }
+        }
+
+        private void setPlayerID(CommandSourceStack source) {
+            try {
+                if (source == null) throw new NullPointerException();
+                playerID = toPlayerID(source);
+            }
+            catch (NullPointerException e) {
+                playerID = null;
+            }
+        }
+
+        private void setPlayerID(String server) {
+            try {
+                if (source == null) throw new NullPointerException();
+                playerID = server;
+            }
+            catch (NullPointerException e) {
+                playerID = null;
+            }
+        }
+        // #endregion Setters
+
+        // username
         public String username() {
             try {
                 if (username == null) throw new NullPointerException();
                 return username;
             }
-            catch (Exception e) {
-                return "Unknown Sender";
+            catch (NullPointerException e) {
+                return "Unknown Username";
             }
         }
 
+        private String toUsername(ServerPlayer sender) {
+            try {
+                if (sender == null) throw new NullPointerException();
+                return FileIO.fetchUsername(toPlayerID(sender));
+            }
+            catch (Exception e) {
+                return null;
+            }
+        }
+
+        // for server
+        private String toUsername(MinecraftServer server) {
+            try {
+                if (server == null) throw new NullPointerException();
+                return "Server"; // ! is there another more fitting way to get name from server obj? if not, honestly this is already pretty solid
+            }
+            catch (Exception e) {
+                return null;
+            }
+        }
+
+        // for commands
+        private String toUsername(CommandSourceStack source) {
+            try {
+                if (source == null) throw new NullPointerException();
+                return source.getTextName();
+            }
+            catch (Exception e) {
+                return null;
+            }
+        }
+
+        // #region Setters
         private void setUsername(ServerPlayer sender) {
             try {
-                username = FileIO.fetchUsername(toPlayerID(sender));
+                username = toUsername(sender);
             }
             catch (NullPointerException e) {
                 username = null;
             }
         }
 
+        private void setUsername(MinecraftServer server) {
+            try {
+                username = toUsername(server);
+            }
+            catch (NullPointerException e) {
+                username = null;
+            }
+        }
+
+        private void setUsername(CommandSourceStack source) {
+            try {
+                username = toUsername(source);
+            }
+            catch (NullPointerException e) {
+                username = null;
+            }
+        }
+
+        private void setUsername(String sender) {
+            try {
+                username = sender;
+            }
+            catch (NullPointerException e) {
+                username = null;
+            }
+        }
+        // #endregion Setters
+
+        // message
         public String message() {
             try {
                 if (message == null) throw new NullPointerException();
@@ -302,16 +444,27 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             }
         }
 
+        private String toMessage(PlayerChatMessage signedMessage) {
+            try {
+                if (signedMessage == null) throw new NullPointerException();
+                return signedMessage.signedContent();
+            }
+            catch (Exception e) {
+                return null;
+            }
+        }
+
+        // #region Setters
         private void setMessage(PlayerChatMessage signedMessage) {
             try {
-                message = signedMessage.signedContent();
+                message = toMessage(signedMessage);
             }
             catch (NullPointerException e) {
                 message = null;
             }
         }
 
-        private void setMessageText(String text) {
+        private void setMessage(String text) {
             try {
                 message = text;
             }
@@ -319,13 +472,27 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
                 message = null;
             }
         }
+        // #endregion Setters
 
+        public String date() {
+            try {
+                return date.toString();
+            }
+            catch (Exception e) {
+                return "Unknown date";
+            }
+        }
+
+        // #region Setters
         private void setDate() {
             try {
                 date = LocalDate.now();
             }
-            catch (Exception e) { } // shouldn't really get to this point
+            catch (Exception e) { 
+                return;
+            }
         }
+        // #endregion Setters
 
         public String toString() {
             // error handling done in individual get methods
@@ -373,12 +540,12 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     }
 
     private class FileIO {
-        // #region Properties
+        // #region Construct
+        private static final String JSON_FILE_PATH = "DiscordIntegration-Data/History.json";
         private static final Gson gson = new GsonBuilder()
             .setPrettyPrinting()
             .registerTypeAdapter(LocalDate.class, new LocalDateAdapter())
             .create();
-        private static final String JSON_FILE_PATH = "DiscordIntegration-Data/History.json";
 
         // Custom TypeAdapter for LocalDate
         private static class LocalDateAdapter extends TypeAdapter<LocalDate> {
@@ -397,19 +564,22 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
                 return LocalDate.parse(in.nextString());
             }
         }
-        // #endregion Properties
 
-        // #region Init
         public static void init() {
             ensureHistoryFileExists();
         }
 
         private static void ensureHistoryFileExists() {
+            try {
             File file = new File(JSON_FILE_PATH);
-            tryMkdir(file.getParentFile());
-            tryCreateFile(file);
+            mkdir(file.getParentFile());
+            createFile(file);
+            }
+            catch (IOException e) {
+                DiscordIntegration.LOGGER.error("Error in ensureHistoryFileExists():", e);
+            }
         }
-        // #endregion Init
+        // #endregion Construct
 
         // #region Read
         public static List<SimpleChatMessage> readMessages() {
@@ -442,7 +612,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             return msgs;
         }
 
-        private static String fetchUsername(String uuid) {
+        public static String fetchUsername(String uuid) {
             try (InputStreamReader reader = new InputStreamReader(
                 new URL(String.format(
                     "https://playerdb.co/api/player/minecraft/%s",
@@ -466,12 +636,6 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
                 DiscordIntegration.LOGGER.warn("Failed to fetch usernames:", e);
                 return null;
             }
-        }
-
-        private static String toUsername(JsonObject response) throws JsonSyntaxException {
-            JsonObject data = getAsJsonObject(response, "data");
-            JsonObject player = getAsJsonObject(data, "player");
-            return getAsString(player, "username");
         }
 
         private static JsonObject getAsJsonObject(JsonObject response, String name) throws JsonSyntaxException {
@@ -535,26 +699,16 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             }
         }
 
-        private static void tryMkdir(File parentDir) {
-            try {
-                boolean success = parentDir.exists() || parentDir.mkdirs();
-                if (!success)
-                    throw new IOException("Could not create directory: " + parentDir);
-            }
-            catch (IOException e) {
-                DiscordIntegration.LOGGER.error("Error: ", e);
-            }
+        private static void mkdir(File parentDir) throws IOException {
+            boolean success = parentDir.exists() || parentDir.mkdirs();
+            if (!success)
+                throw new IOException("Could not create directory: " + parentDir);
         }
 
-        private static void tryCreateFile(File file) {
-            try {
-                boolean success = file.exists() || file.createNewFile();
-                if (!(success))
-                    throw new IOException("Could not create file: " + file);
-            }
-            catch (IOException e) {
-                DiscordIntegration.LOGGER.error("Error: ", e);
-            }
+        private static void createFile(File file) throws IOException {
+            boolean success = file.exists() || file.createNewFile();
+            if (!(success))
+                throw new IOException("Could not create file: " + file);
         }
 
         private static void toJson(FileWriter writer, List<SimpleChatMessage> msgs) {
