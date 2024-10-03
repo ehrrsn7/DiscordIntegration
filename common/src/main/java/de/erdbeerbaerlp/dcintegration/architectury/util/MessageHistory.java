@@ -221,7 +221,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     public class SimpleChatMessage {
         // #region Construct
         // Properties
-        private String playerID = new String();
+        private String playerID = new String(); // ! change from String to UUID? (needs to be able to stay as a Nullable)
         private String username = new String();
         private String message = new String();
         private LocalDate date = LocalDate.now();
@@ -270,6 +270,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         // #endregion Construct
 
         // #region Accessors
+        // ! TODO: change to either id() or uuid()
         public String playerID() {
             try {
                 if (playerID == null) throw new NullPointerException();
@@ -330,6 +331,9 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             try {
                 if (server == null) throw new NullPointerException();
                 playerID = toPlayerID(server);
+                // ! see common/src/main/java/de/erdbeerbaerlp/dcintegration/architectury/metrics/Metrics.java:line 51
+                //      for a better way to get the uuid of the server
+                //      (the object `server` would just be unused at that point)
             }
             catch (NullPointerException e) {
                 playerID = null;
@@ -358,6 +362,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         // #endregion Setters
 
         // username
+        // ! TODO: change to name()?
         public String username() {
             try {
                 if (username == null) throw new NullPointerException();
@@ -493,7 +498,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             try {
                 date = LocalDate.now();
             }
-            catch (Exception e) { 
+            catch (Exception e) {
                 return;
             }
         }
