@@ -1,10 +1,13 @@
 # Project exclude paths
 /.gradle/
 /common/.gradle/
+/common/bin/
 /common/build/
 /fabric/.gradle/
+/fabric/bin/
 /fabric/build/
 /neoforge/.gradle/
+/neoforge/bin/
 /neoforge/build/
 /~
 /.vscode
