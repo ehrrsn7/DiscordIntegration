@@ -262,6 +262,8 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
 
         public SimpleChatMessage(String text) {
             // for internal use
+            setPlayerID("DiscordIntegration");
+            setUsername("DiscordIntegration");
             setMessage(text);
             setDate();
         }
@@ -292,7 +294,10 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         private String toPlayerID(MinecraftServer server) {
             try {
                 if (server == null) throw new NullPointerException();
-                return "Server"; // ! is there a more fitting way to get id from server obj?
+                return String.format("%s:%d",
+                    server.getLocalIp(),
+                    server.getPort()
+                );
             }
             catch (Exception e) {
                 return null;
@@ -341,10 +346,10 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             }
         }
 
-        private void setPlayerID(String server) {
+        private void setPlayerID(String text) {
             try {
-                if (source == null) throw new NullPointerException();
-                playerID = server;
+                if (text == null) throw new NullPointerException();
+                playerID = text;
             }
             catch (NullPointerException e) {
                 playerID = null;
@@ -359,7 +364,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
                 return username;
             }
             catch (NullPointerException e) {
-                return "Unknown Username";
+                return "Unknown Name";
             }
         }
 
@@ -377,7 +382,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         private String toUsername(MinecraftServer server) {
             try {
                 if (server == null) throw new NullPointerException();
-                return "Server"; // ! is there another more fitting way to get name from server obj? if not, honestly this is already pretty solid
+                return"Server";
             }
             catch (Exception e) {
                 return null;
