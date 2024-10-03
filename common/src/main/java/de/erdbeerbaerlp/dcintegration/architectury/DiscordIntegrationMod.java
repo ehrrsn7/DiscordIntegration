@@ -70,7 +70,7 @@ public final class DiscordIntegrationMod {
             if (DiscordIntegration.INSTANCE.getJDA() != null) {
                 Thread.sleep(2000); //Wait for it to cache the channels
                 CommandRegistry.registerDefaultCommands();
-                if (!Localization.instance().serverStarting.isEmpty() && !history.checkDuplicate(minecraftServer, "starting").hasDuplicate()) {
+                if (!Localization.instance().serverStarting.isEmpty() && !history.checkDuplicate(minecraftServer, "Starting...").hasDuplicate()) {
 
                     if (!Localization.instance().serverStarting.isBlank())
                         if (DiscordIntegration.INSTANCE.getChannel() != null) {
@@ -92,7 +92,7 @@ public final class DiscordIntegrationMod {
         DiscordIntegration.LOGGER.info("Started");
         if (DiscordIntegration.INSTANCE != null) {
             DiscordIntegration.started = new Date().getTime();
-            if (!Localization.instance().serverStarted.isBlank() && !history.checkDuplicate(minecraftServer, "started").hasDuplicate())
+            if (!Localization.instance().serverStarted.isBlank() && !history.checkDuplicate(minecraftServer, "Started!").hasDuplicate())
                 if (DiscordIntegration.startingMsg != null) {
                     if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.startMessages.asEmbed) {
                         if (!Configuration.instance().embedMode.startMessages.customJSON.isBlank()) {
@@ -138,7 +138,7 @@ public final class DiscordIntegrationMod {
     public static void serverStopping(MinecraftServer minecraftServer) {
         Metrics.MetricsBase.scheduler.shutdownNow();
         if (DiscordIntegration.INSTANCE != null) {
-            if (!Localization.instance().serverStopped.isBlank() && !history.checkDuplicate(minecraftServer, "stopping").hasDuplicate())
+            if (!Localization.instance().serverStopped.isBlank() && !history.checkDuplicate(minecraftServer, "Stopping...").hasDuplicate())
                 if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.stopMessages.asEmbed) {
                     if (!Configuration.instance().embedMode.stopMessages.customJSON.isBlank()) {
                         final EmbedBuilder b = Configuration.instance().embedMode.stopMessages.toEmbedJson(Configuration.instance().embedMode.stopMessages.customJSON);
@@ -158,7 +158,7 @@ public final class DiscordIntegrationMod {
         if (DiscordIntegration.INSTANCE != null) {
             if (!stopped && DiscordIntegration.INSTANCE.getJDA() != null) minecraftServer.execute(() -> {
                 DiscordIntegration.INSTANCE.stopThreads();
-                if (!Localization.instance().serverCrash.isBlank() && !history.checkDuplicate(minecraftServer, "stopped").hasDuplicate())
+                if (!Localization.instance().serverCrash.isBlank() && !history.checkDuplicate(minecraftServer, "Stopped!").hasDuplicate())
                     try {
                         if (Configuration.instance().embedMode.enabled && Configuration.instance().embedMode.stopMessages.asEmbed) {
                             DiscordIntegration.INSTANCE.sendMessageReturns(new MessageCreateBuilder().addEmbeds(Configuration.instance().embedMode.stopMessages.toEmbed().setDescription(Localization.instance().serverCrash).build()).build(), DiscordIntegration.INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID)).get();
