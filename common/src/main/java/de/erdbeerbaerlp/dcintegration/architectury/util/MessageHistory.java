@@ -14,7 +14,9 @@ import java.util.*;
 import java.util.stream.*;
 import java.lang.reflect.Type;
 import java.net.UnknownHostException;
-import java.net.URL;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.LocalDate;
 
 // handle duplicate messages
@@ -72,15 +74,6 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         // return Configuration.instance().messages.ignoreDuplicateMessages;
         return true; // debug value
     }
-
-    // Destruct
-    public void shutdown() {
-        FileIO.cleanUpAndWriteMessages(messages);
-        DiscordIntegration.LOGGER.info(String.format(
-            "MessageHistory stopping: saving %,d messages...",
-            messages.size()
-        ));
-    }
     // #endregion Construct
 
     // public methods
@@ -90,8 +83,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             // to disable duplicates check, then early return dummy result
             // where hasDuplicate == false
             return new DuplicateCheckResult(false, messages.size(), 0, msg);
-        if (msg.message().contains("starting")) init();
-        if (msg.message().contains("stopping")) shutdown();
+        if (msg.message().contains("Starting")) init();
         long amountFound = countDuplicates(msg);
         boolean hasDuplicate = amountFound > 0;
         if (!hasDuplicate) addMessage(msg);
@@ -140,8 +132,8 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         return messages.stream()
             // date needs to match but time doesn't matter, so just filter
             .filter(SimpleChatMessage::matchesToday)
-            // only returns exact matches of playerID AND message
-            .filter(element -> element.matchesPlayerID(msg))
+            // only returns exact matches of uuid AND message
+            .filter(element -> element.matchesuuid(msg))
             .filter(element -> element.matchesMessage(msg));
     }
     // #endregion Handle Duplicates
@@ -221,7 +213,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
     public class SimpleChatMessage {
         // #region Construct
         // Properties
-        private String playerID = new String(); // ! change from String to UUID? (needs to be able to stay as a Nullable)
+        private UUID uuid = new UUID(0, 0);
         private String username = new String();
         private String message = new String();
         private LocalDate date = LocalDate.now();
@@ -230,7 +222,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         // non-default
         public SimpleChatMessage(ServerPlayer sender, PlayerChatMessage signedMessage) {
             // Values should be assigned no matter what using null checks
-            setPlayerID(sender);
+            setUuid(sender);
             setUsername(sender);
             setMessage(signedMessage);
             setDate();
@@ -238,7 +230,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
 
         public SimpleChatMessage(ServerPlayer sender, String text) {
             // for non-chat-based events
-            setPlayerID(sender);
+            setUuid(sender);
             setUsername(sender);
             setMessage(text);
             setDate();
@@ -246,7 +238,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
 
         public SimpleChatMessage(MinecraftServer server, String text) {
             // for server messages
-            setPlayerID(server);
+            setUuid(server);
             setUsername(server);
             setMessage(text);
             setDate();
@@ -254,7 +246,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
 
         public SimpleChatMessage(CommandSourceStack source, String text) {
             // for commands
-            setPlayerID(source);
+            setUuid(source);
             setUsername(source);
             setMessage(text);
             setDate();
@@ -262,7 +254,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
 
         public SimpleChatMessage(String text) {
             // for internal use
-            setPlayerID("DiscordIntegration");
+            setUuid("DiscordIntegration");
             setUsername("DiscordIntegration");
             setMessage(text);
             setDate();
@@ -270,21 +262,20 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         // #endregion Construct
 
         // #region Accessors
-        // ! TODO: change to either id() or uuid()
-        public String playerID() {
+        public UUID uuid() {
             try {
-                if (playerID == null) throw new NullPointerException();
-                return playerID;
+                if (uuid == null) throw new NullPointerException();
+                return uuid;
             }
             catch (Exception e) {
-                return "0000000";
+                return new UUID(0, 0);
             }
         }
 
-        private String toPlayerID(ServerPlayer sender) {
+        private UUID toUuid(ServerPlayer sender) {
             try {
                 if (sender == null) throw new NullPointerException();
-                return sender.getUUID().toString();
+                return sender.getUUID();
             }
             catch (Exception e) {
                 return null;
@@ -292,13 +283,11 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         }
 
         // different syntax for server
-        private String toPlayerID(MinecraftServer server) {
+        private UUID toUuid(MinecraftServer server) {
             try {
                 if (server == null) throw new NullPointerException();
-                return String.format("%s:%d",
-                    server.getLocalIp(),
-                    server.getPort()
-                );
+                // ! fix me SEE common/src/main/java/de/erdbeerbaerlp/dcintegration/architectury/metrics/MetricsConfig.java:line 28
+                return new UUID(0, 0);
             }
             catch (Exception e) {
                 return null;
@@ -306,10 +295,10 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         }
 
         // different syntax for commands
-        private String toPlayerID(CommandSourceStack source) {
+        private UUID toUuid(CommandSourceStack source) {
             try {
                 if (source == null) throw new NullPointerException();
-                return source.getEntity().getUUID().toString();
+                return source.getEntity().getUUID();
             }
             catch (Exception e) {
                 return null;
@@ -317,46 +306,43 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         }
 
         // #region Setters
-        private void setPlayerID(ServerPlayer sender) {
+        private void setUuid(ServerPlayer sender) {
             try {
                 if (sender == null) throw new NullPointerException();
-                playerID = toPlayerID(sender);
+                uuid = toUuid(sender);
             }
             catch (NullPointerException e) {
-                playerID = null;
+                uuid = null;
             }
         }
 
-        private void setPlayerID(MinecraftServer server) {
+        private void setUuid(MinecraftServer server) {
             try {
                 if (server == null) throw new NullPointerException();
-                playerID = toPlayerID(server);
-                // ! see common/src/main/java/de/erdbeerbaerlp/dcintegration/architectury/metrics/Metrics.java:line 51
-                //      for a better way to get the uuid of the server
-                //      (the object `server` would just be unused at that point)
+                uuid = toUuid(server);
             }
             catch (NullPointerException e) {
-                playerID = null;
+                uuid = null;
             }
         }
 
-        private void setPlayerID(CommandSourceStack source) {
+        private void setUuid(CommandSourceStack source) {
             try {
                 if (source == null) throw new NullPointerException();
-                playerID = toPlayerID(source);
+                uuid = toUuid(source);
             }
             catch (NullPointerException e) {
-                playerID = null;
+                uuid = null;
             }
         }
 
-        private void setPlayerID(String text) {
+        private void setUuid(String text) {
             try {
                 if (text == null) throw new NullPointerException();
-                playerID = text;
+                uuid = UUID.fromString(text);
             }
             catch (NullPointerException e) {
-                playerID = null;
+                uuid = null;
             }
         }
         // #endregion Setters
@@ -376,7 +362,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         private String toUsername(ServerPlayer sender) {
             try {
                 if (sender == null) throw new NullPointerException();
-                return FileIO.fetchUsername(toPlayerID(sender));
+                return FileIO.fetchUsername(toUuid(sender));
             }
             catch (Exception e) {
                 return null;
@@ -507,7 +493,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         public String toString() {
             // error handling done in individual get methods
             return "{\n" +
-                String.format("\tplayerID: %s,\n", playerID()) +
+                String.format("\tuuid: %s,\n", uuid()) +
                 String.format("\tusername: %s,\n", username()) +
                 String.format("\tmessage: %s,\n", message()) +
                 String.format("\tdate: %s,\n", date.toString()) +
@@ -526,10 +512,10 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             }
         }
 
-        private boolean matchesPlayerID(SimpleChatMessage msg) {
+        private boolean matchesuuid(SimpleChatMessage msg) {
             try {
-                if (playerID == null || msg == null) throw new NullPointerException();
-                return msg.playerID().equals(playerID);
+                if (uuid == null || msg == null) throw new NullPointerException();
+                return msg.uuid().equals(uuid);
             }
             catch (Exception e) {
                 return false;
@@ -622,13 +608,8 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
             return msgs;
         }
 
-        public static String fetchUsername(String uuid) {
-            try (InputStreamReader reader = new InputStreamReader(
-                new URL(String.format(
-                    "https://playerdb.co/api/player/minecraft/%s",
-                    uuid.replace("-", "")
-                )).openStream()
-            )) {
+        public static String fetchUsername(UUID uuid) {
+            try (InputStreamReader reader = toInputStreamReader(uuid)) {
                 JsonObject response = gson.fromJson(reader, JsonObject.class);
                 JsonObject data = getAsJsonObject(response, "data");
                 JsonObject player = getAsJsonObject(data, "player");
@@ -646,6 +627,14 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
                 DiscordIntegration.LOGGER.warn("Failed to fetch usernames:", e);
                 return null;
             }
+        }
+
+        private static InputStreamReader toInputStreamReader(UUID uuid) throws MalformedURLException, IOException, URISyntaxException {
+            String uri = String.format(
+                "https://playerdb.co/api/player/minecraft/%s",
+                uuid.toString().replace("-", "").toString()
+            );
+            return new InputStreamReader(new URI(uri).toURL().openStream());
         }
 
         private static JsonObject getAsJsonObject(JsonObject response, String name) throws JsonSyntaxException {
