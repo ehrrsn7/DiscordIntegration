@@ -20,12 +20,13 @@ import java.time.LocalDate;
 // handle duplicate messages
 public class MessageHistory { // ! Convert to Singleton? Note static probably isn't appropriate
     // #region Construct
-    private boolean initialized = false;
-    private boolean enableDuplicatesCheck = loadFromConfig("Config.Messages.ignoreDuplicateMessages");
+    private static boolean enableDuplicatesCheck = loadFromConfig("Config.Messages.ignoreDuplicateMessages");
+    private static boolean initialized = false;
     // Keep record of messages in memory
     private List<SimpleChatMessage> messages = new ArrayList<>();
 
     public MessageHistory() {
+        // check static boolean value to ensure this only happens once
         if (!initialized) init();
     }
 
@@ -50,7 +51,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         }
     }
 
-    private boolean loadFromConfig(String which) {
+    private static boolean loadFromConfig(String which) {
         try {
             if (which.equals("Config.Messages.ignoreDuplicateMessages"))
                 return loadDuplicatesConfig();
@@ -62,7 +63,7 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         }
     }
 
-    private boolean loadDuplicatesConfig() {
+    private static boolean loadDuplicatesConfig() {
         // ! Fix
         System.out.println(String.format(
             "Loading configuration: Configuration.instance().messages: %s\n" +
@@ -71,15 +72,6 @@ public class MessageHistory { // ! Convert to Singleton? Note static probably is
         ));
         // return Configuration.instance().messages.ignoreDuplicateMessages;
         return true; // debug value
-    }
-
-    // Destruct
-    public void shutdown() {
-        FileIO.cleanUpAndWriteMessages(messages);
-        DiscordIntegration.LOGGER.info(String.format(
-            "MessageHistory stopping: saving %,d messages...",
-            messages.size()
-        ));
     }
     // #endregion Construct
 
